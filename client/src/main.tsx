@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import './index.css';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
+import { Login } from './pages/Login';
+import { Signup } from './pages/Signup';
 import { Dashboard } from './pages/Dashboard';
 import { Expenses } from './pages/Expenses';
 import { RecurringPage } from './pages/Recurring';
@@ -23,20 +27,26 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="expenses" element={<Expenses />} />
-            <Route path="recurring" element={<RecurringPage />} />
-            <Route path="merchants" element={<Merchants />} />
-            <Route path="categories" element={<Categories />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="products" element={<Products />} />
-            <Route path="skus" element={<SKUs />} />
-            <Route path="purchases" element={<Purchases />} />
-            <Route path="sell-orders" element={<SellOrders />} />
-          </Route>
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Dashboard />} />
+                <Route path="expenses" element={<Expenses />} />
+                <Route path="recurring" element={<RecurringPage />} />
+                <Route path="merchants" element={<Merchants />} />
+                <Route path="categories" element={<Categories />} />
+                <Route path="analytics" element={<Analytics />} />
+                <Route path="products" element={<Products />} />
+                <Route path="skus" element={<SKUs />} />
+                <Route path="purchases" element={<Purchases />} />
+                <Route path="sell-orders" element={<SellOrders />} />
+              </Route>
+            </Route>
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>
