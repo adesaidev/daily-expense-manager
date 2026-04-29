@@ -3,21 +3,20 @@ try {
   app = require('../server/dist/app').default;
 } catch (err) {
   app = (_req, res) => {
-    res.status(500).json({ loadError: err.message, stack: err.stack });
+    res.status(500).json({ loadError: err.message });
   };
 }
 
-// Temporarily expose DB_URL diagnostic (first 40 chars only)
-const originalApp = app;
+const dbUrl = process.env.DATABASE_URL || '';
+
 module.exports = (req, res) => {
-  if (req.url === '/api/_diag') {
-    const url = process.env.DATABASE_URL || '';
+  if (req.url && req.url.includes('_diag')) {
     return res.json({
-      hasUrl: !!url,
-      urlStart: url.substring(0, 40),
-      containsNeon: url.includes('neon.tech'),
+      hasUrl: !!dbUrl,
+      urlStart: dbUrl.substring(0, 50),
+      containsNeon: dbUrl.includes('neon.tech'),
       nodeEnv: process.env.NODE_ENV,
     });
   }
-  return originalApp(req, res);
+  return app(req, res);
 };
