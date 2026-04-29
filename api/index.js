@@ -7,4 +7,17 @@ try {
   };
 }
 
-module.exports = app;
+// Temporarily expose DB_URL diagnostic (first 40 chars only)
+const originalApp = app;
+module.exports = (req, res) => {
+  if (req.url === '/api/_diag') {
+    const url = process.env.DATABASE_URL || '';
+    return res.json({
+      hasUrl: !!url,
+      urlStart: url.substring(0, 40),
+      containsNeon: url.includes('neon.tech'),
+      nodeEnv: process.env.NODE_ENV,
+    });
+  }
+  return originalApp(req, res);
+};
