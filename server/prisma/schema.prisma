@@ -1,0 +1,185 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique
+  color     String     @default("#6366f1")
+  icon      String     @default("tag")
+  createdAt DateTime   @default(now())
+  expenses  Expense[]
+  skus      SKU[]
+}
+
+model Merchant {
+  id         Int        @id @default(autoincrement())
+  name       String     @unique
+  website    String?
+  logo       String?
+  categoryId Int?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  expenses   Expense[]
+  purchases  Purchase[]
+}
+
+model SKU {
+  id             Int             @id @default(autoincrement())
+  skuCode        String?         @unique
+  name           String
+  description    String?
+  categoryId     Int?
+  category       Category?       @relation(fields: [categoryId], references: [id])
+  unit           String          @default("pcs")
+  currentStock   Decimal         @default(0) @db.Decimal(10, 2)
+  minStock       Decimal         @default(0) @db.Decimal(10, 2)
+  costPrice      Decimal?        @db.Decimal(10, 2)
+  mrp            Decimal?        @db.Decimal(10, 2)
+  sellPrice      Decimal?        @db.Decimal(10, 2)
+  hsnCode        String?
+  gstRate        Decimal?        @db.Decimal(5, 2)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  purchaseItems  PurchaseItem[]
+  sellOrderItems SellOrderItem[]
+}
+
+model Purchase {
+  id          Int            @id @default(autoincrement())
+  merchantId  Int?
+  merchant    Merchant?      @relation(fields: [merchantId], references: [id])
+  date        DateTime       @default(now())
+  totalAmount Decimal        @db.Decimal(10, 2)
+  notes       String?
+  status      PurchaseStatus @default(COMPLETED)
+  items       PurchaseItem[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model PurchaseItem {
+  id         Int      @id @default(autoincrement())
+  purchaseId Int
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  skuId      Int
+  sku        SKU      @relation(fields: [skuId], references: [id])
+  quantity   Decimal  @db.Decimal(10, 2)
+  unitPrice  Decimal  @db.Decimal(10, 2)
+  totalPrice Decimal  @db.Decimal(10, 2)
+}
+
+model SellOrder {
+  id           Int             @id @default(autoincrement())
+  date         DateTime        @default(now())
+  customerName String?
+  totalAmount  Decimal         @db.Decimal(10, 2)
+  notes        String?
+  status       SellOrderStatus @default(COMPLETED)
+  items        SellOrderItem[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model SellOrderItem {
+  id          Int       @id @default(autoincrement())
+  sellOrderId Int
+  sellOrder   SellOrder @relation(fields: [sellOrderId], references: [id], onDelete: Cascade)
+  skuId       Int
+  sku         SKU       @relation(fields: [skuId], references: [id])
+  quantity    Decimal   @db.Decimal(10, 2)
+  unitPrice   Decimal   @db.Decimal(10, 2)
+  totalPrice  Decimal   @db.Decimal(10, 2)
+}
+
+model Expense {
+  id            Int           @id @default(autoincrement())
+  amount        Decimal       @db.Decimal(10, 2)
+  description   String
+  date          DateTime
+  categoryId    Int
+  category      Category      @relation(fields: [categoryId], references: [id])
+  merchantId    Int?
+  merchant      Merchant?     @relation(fields: [merchantId], references: [id])
+  paymentStatus PaymentStatus @default(COMPLETED)
+  paymentType   PaymentType?
+  billImagePath String?
+  isRecurring   Boolean       @default(false)
+  recurringId   Int?
+  recurring     Recurring?    @relation(fields: [recurringId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Recurring {
+  id          Int       @id @default(autoincrement())
+  amount      Decimal   @db.Decimal(10, 2)
+  description String
+  categoryId  Int
+  frequency   Frequency
+  startDate   DateTime
+  endDate     DateTime?
+  lastRun     DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  expenses    Expense[]
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+}
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum SellOrderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentType {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CARD
+}
+
+model Product {
+  id                Int      @id @default(autoincrement())
+  name              String
+  genericName       String?
+  weightGrams       Float?
+  size              String?
+  variation         String?
+  color             String?
+  costPrice         Decimal  @db.Decimal(10, 2)
+  mrp               Decimal  @db.Decimal(10, 2)
+  recommendedAge    String?
+  includeComponents String?
+  material          String?
+  packageDimension  String?
+  productDimension  String?
+  imagePath         String?
+  hsnCode           String?
+  gstRate           Float?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}

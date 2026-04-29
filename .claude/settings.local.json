@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(pg_ctl start *)",
+      "PowerShell(psql *)",
+      "PowerShell(mkdir \"D:\\\\Projects\\\\Daily Expence manager\\\\server\\\\uploads\" -ErrorAction SilentlyContinue; echo \"done\")",
+      "Bash(npx prisma *)",
+      "Bash(node -e \"const r = require\\('./node_modules/react-hook-form'\\); console.log\\(typeof r.useFieldArray\\)\")",
+      "Bash(cmd /c \"npx prisma migrate dev --name update_sku_fields\")",
+      "Bash(npx tsc *)",
+      "Bash(curl *)",
+      "Bash(node -e ' *)",
+      "Bash(npx tsx -e ' *)",
+      "Bash(npx tsx *)",
+      "Bash(npm run *)",
+      "Bash(git -C \"d:\\\\Projects\\\\Daily Expence manager\" rev-parse --git-dir)"
+    ]
+  }
+}
