@@ -1,6 +1,11 @@
 {
-  "buildCommand": "npm run db:generate --workspace=server && npm run build --workspace=client",
+  "buildCommand": "npm run db:generate --workspace=server && npm run build --workspace=server && npm run build --workspace=client",
   "outputDirectory": "client/dist",
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "node_modules/.prisma/client/**"
+    }
+  },
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/((?!api).*)", "destination": "/index.html" }
