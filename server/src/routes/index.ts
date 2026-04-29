@@ -13,6 +13,8 @@ import { getProducts, getProduct, createProduct, updateProduct, deleteProduct, u
 
 const router = Router();
 
+router.get('/health', (_req, res) => res.json({ ok: true }));
+
 // Categories
 router.get('/categories', getCategories);
 router.post('/categories', createCategory);

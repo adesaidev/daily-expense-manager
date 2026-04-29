@@ -13,6 +13,7 @@ const purchases_1 = require("../controllers/purchases");
 const sellOrders_1 = require("../controllers/sellOrders");
 const products_1 = require("../controllers/products");
 const router = (0, express_1.Router)();
+router.get('/health', (_req, res) => res.json({ ok: true }));
 // Categories
 router.get('/categories', categories_1.getCategories);
 router.post('/categories', categories_1.createCategory);
