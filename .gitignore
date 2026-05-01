@@ -1,5 +1,7 @@
 node_modules/
 build/
+dist/
+client/dist/
 .claude/
 server/uploads/
 .env
