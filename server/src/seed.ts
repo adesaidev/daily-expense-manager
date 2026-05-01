@@ -12,15 +12,19 @@ const categories = [
   { name: 'Other', color: '#6b7280', icon: 'tag' },
 ];
 
+// Pass SEED_USER_ID env var to seed for a specific user, e.g.:
+//   SEED_USER_ID=firebase-uid npm run db:seed --workspace=server
+// New users automatically get these categories seeded on first login.
 async function main() {
+  const userId = process.env.SEED_USER_ID ?? '';
   for (const cat of categories) {
     await prisma.category.upsert({
-      where: { name: cat.name },
+      where: { name_userId: { name: cat.name, userId } },
       update: {},
-      create: cat,
+      create: { ...cat, userId },
     });
   }
-  console.log('Seeded categories');
+  console.log(`Seeded categories for userId="${userId}"`);
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());

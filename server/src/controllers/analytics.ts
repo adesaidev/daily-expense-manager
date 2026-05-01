@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
 
+function userWhere(req: Request) {
+  return req.user!.role === 'ADMIN' ? {} : { userId: req.user!.uid };
+}
+
 export async function getMonthlySummary(req: Request, res: Response, next: NextFunction) {
   try {
     const { year = new Date().getFullYear() } = req.query;
@@ -9,11 +13,10 @@ export async function getMonthlySummary(req: Request, res: Response, next: NextF
     const end = new Date(Number(year), 11, 31, 23, 59, 59);
 
     const expenses = await prisma.expense.findMany({
-      where: { date: { gte: start, lte: end } },
+      where: { date: { gte: start, lte: end }, ...userWhere(req) },
       include: { category: true },
     });
 
-    // Group by month
     const monthly: Record<number, number> = {};
     for (let m = 1; m <= 12; m++) monthly[m] = 0;
 
@@ -36,7 +39,7 @@ export async function getMonthlySummary(req: Request, res: Response, next: NextF
 export async function getCategoryBreakdown(req: Request, res: Response, next: NextFunction) {
   try {
     const { month, year } = req.query;
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { ...userWhere(req) };
 
     if (month && year) {
       const start = new Date(Number(year), Number(month) - 1, 1);
@@ -52,7 +55,7 @@ export async function getCategoryBreakdown(req: Request, res: Response, next: Ne
     });
 
     const categories = await prisma.category.findMany({
-      where: { id: { in: result.map(r => r.categoryId) } },
+      where: { id: { in: result.map(r => r.categoryId) }, ...userWhere(req) },
     });
 
     const catMap = Object.fromEntries(categories.map(c => [c.id, c]));
@@ -78,20 +81,22 @@ export async function getDashboardStats(req: Request, res: Response, next: NextF
     const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
+    const uw = userWhere(req);
+
     const [thisMonth, lastMonth, totalExpenses, topCategory] = await Promise.all([
       prisma.expense.aggregate({
-        where: { date: { gte: monthStart, lte: monthEnd } },
+        where: { date: { gte: monthStart, lte: monthEnd }, ...uw },
         _sum: { amount: true },
         _count: true,
       }),
       prisma.expense.aggregate({
-        where: { date: { gte: prevMonthStart, lte: prevMonthEnd } },
+        where: { date: { gte: prevMonthStart, lte: prevMonthEnd }, ...uw },
         _sum: { amount: true },
       }),
-      prisma.expense.count(),
+      prisma.expense.count({ where: uw }),
       prisma.expense.groupBy({
         by: ['categoryId'],
-        where: { date: { gte: monthStart, lte: monthEnd } },
+        where: { date: { gte: monthStart, lte: monthEnd }, ...uw },
         _sum: { amount: true },
         orderBy: { _sum: { amount: 'desc' } },
         take: 1,
@@ -100,7 +105,9 @@ export async function getDashboardStats(req: Request, res: Response, next: NextF
 
     let topCategoryName = null;
     if (topCategory.length > 0) {
-      const cat = await prisma.category.findUnique({ where: { id: topCategory[0].categoryId } });
+      const cat = await prisma.category.findFirst({
+        where: { id: topCategory[0].categoryId, ...uw },
+      });
       topCategoryName = cat?.name ?? null;
     }
 

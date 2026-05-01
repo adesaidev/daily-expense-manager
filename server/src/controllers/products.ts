@@ -24,12 +24,17 @@ const productSchema = z.object({
   gstRate: z.number().refine(v => GST_RATES.includes(v)).optional().nullable(),
 });
 
+function userWhere(req: Request) {
+  return req.user!.role === 'ADMIN' ? {} : { userId: req.user!.uid };
+}
+
 export async function getProducts(req: Request, res: Response, next: NextFunction) {
   try {
     const { search } = req.query;
 
     const where = search
       ? {
+          ...userWhere(req),
           OR: [
             { name: { contains: String(search), mode: 'insensitive' as const } },
             { genericName: { contains: String(search), mode: 'insensitive' as const } },
@@ -44,7 +49,7 @@ export async function getProducts(req: Request, res: Response, next: NextFunctio
             { productDimension: { contains: String(search), mode: 'insensitive' as const } },
           ],
         }
-      : {};
+      : userWhere(req);
 
     const products = await prisma.product.findMany({
       where,
@@ -59,7 +64,9 @@ export async function getProducts(req: Request, res: Response, next: NextFunctio
 
 export async function getProduct(req: Request, res: Response, next: NextFunction) {
   try {
-    const product = await prisma.product.findUnique({ where: { id: Number(req.params.id) } });
+    const product = await prisma.product.findFirst({
+      where: { id: Number(req.params.id), ...userWhere(req) },
+    });
     if (!product) return res.status(404).json({ error: 'Product not found' });
     res.json(product);
   } catch (err) {
@@ -70,7 +77,7 @@ export async function getProduct(req: Request, res: Response, next: NextFunction
 export async function createProduct(req: Request, res: Response, next: NextFunction) {
   try {
     const data = productSchema.parse(req.body);
-    const product = await prisma.product.create({ data });
+    const product = await prisma.product.create({ data: { ...data, userId: req.user!.uid } });
     res.status(201).json(product);
   } catch (err) {
     next(err);
@@ -81,7 +88,7 @@ export async function updateProduct(req: Request, res: Response, next: NextFunct
   try {
     const data = productSchema.partial().parse(req.body);
     const product = await prisma.product.update({
-      where: { id: Number(req.params.id) },
+      where: { id: Number(req.params.id), ...userWhere(req) },
       data,
     });
     res.json(product);
@@ -92,7 +99,9 @@ export async function updateProduct(req: Request, res: Response, next: NextFunct
 
 export async function deleteProduct(req: Request, res: Response, next: NextFunction) {
   try {
-    const product = await prisma.product.findUnique({ where: { id: Number(req.params.id) } });
+    const product = await prisma.product.findFirst({
+      where: { id: Number(req.params.id), ...userWhere(req) },
+    });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
     if (product.imagePath) {
@@ -111,7 +120,9 @@ export async function uploadProductImage(req: Request, res: Response, next: Next
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const product = await prisma.product.findUnique({ where: { id: Number(req.params.id) } });
+    const product = await prisma.product.findFirst({
+      where: { id: Number(req.params.id), ...userWhere(req) },
+    });
     if (!product) {
       fs.unlinkSync(req.file.path);
       return res.status(404).json({ error: 'Product not found' });
@@ -135,7 +146,9 @@ export async function uploadProductImage(req: Request, res: Response, next: Next
 
 export async function deleteProductImage(req: Request, res: Response, next: NextFunction) {
   try {
-    const product = await prisma.product.findUnique({ where: { id: Number(req.params.id) } });
+    const product = await prisma.product.findFirst({
+      where: { id: Number(req.params.id), ...userWhere(req) },
+    });
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
     if (product.imagePath) {

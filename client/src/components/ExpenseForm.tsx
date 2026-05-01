@@ -129,21 +129,30 @@ export function ExpenseForm({ expense, onSubmit, onCancel }: Props) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const handleFormSubmit = async (data: FormData) => {
-    const saved = await onSubmit({
-      ...data,
-      date: new Date(data.date).toISOString(),
-      merchantId: data.merchantId || null,
-      paymentType: data.paymentType ?? null,
-    });
-    if (billFile && saved?.id) {
-      setUploadingBill(true);
-      try {
-        await uploadBillImage(saved.id, billFile);
-        qc.invalidateQueries({ queryKey: ['expenses'] });
-      } finally {
-        setUploadingBill(false);
+    setSubmitError(null);
+    try {
+      const saved = await onSubmit({
+        ...data,
+        date: new Date(data.date).toISOString(),
+        merchantId: data.merchantId || null,
+        paymentType: data.paymentType ?? null,
+      });
+      if (billFile && saved?.id) {
+        setUploadingBill(true);
+        try {
+          await uploadBillImage(saved.id, billFile);
+          qc.invalidateQueries({ queryKey: ['expenses'] });
+        } finally {
+          setUploadingBill(false);
+        }
       }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? (err instanceof Error ? err.message : 'Failed to save expense');
+      setSubmitError(msg);
     }
   };
 
@@ -373,6 +382,10 @@ export function ExpenseForm({ expense, onSubmit, onCancel }: Props) {
         <input type="checkbox" id="isRecurring" {...register('isRecurring')} className="rounded" />
         <label htmlFor="isRecurring" className="text-sm text-gray-700">Mark as recurring</label>
       </div>
+
+      {submitError && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{submitError}</p>
+      )}
 
       <div className="flex gap-3 pt-2">
         <Button type="submit" disabled={isSubmitting || uploadingBill} className="flex-1">

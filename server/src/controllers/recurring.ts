@@ -12,9 +12,14 @@ const recurringSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export async function getRecurring(_req: Request, res: Response, next: NextFunction) {
+function userWhere(req: Request) {
+  return req.user!.role === 'ADMIN' ? {} : { userId: req.user!.uid };
+}
+
+export async function getRecurring(req: Request, res: Response, next: NextFunction) {
   try {
     const recurring = await prisma.recurring.findMany({
+      where: userWhere(req),
       include: { expenses: { orderBy: { date: 'desc' }, take: 1 } },
       orderBy: { createdAt: 'desc' },
     });
@@ -32,6 +37,7 @@ export async function createRecurring(req: Request, res: Response, next: NextFun
         ...data,
         startDate: new Date(data.startDate),
         endDate: data.endDate ? new Date(data.endDate) : null,
+        userId: req.user!.uid,
       },
     });
     res.status(201).json(recurring);
@@ -45,7 +51,7 @@ export async function updateRecurring(req: Request, res: Response, next: NextFun
     const { id } = req.params;
     const data = recurringSchema.partial().parse(req.body);
     const recurring = await prisma.recurring.update({
-      where: { id: Number(id) },
+      where: { id: Number(id), ...userWhere(req) },
       data: {
         ...data,
         ...(data.startDate ? { startDate: new Date(data.startDate) } : {}),
@@ -61,18 +67,18 @@ export async function updateRecurring(req: Request, res: Response, next: NextFun
 export async function deleteRecurring(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    await prisma.recurring.delete({ where: { id: Number(id) } });
+    await prisma.recurring.delete({ where: { id: Number(id), ...userWhere(req) } });
     res.status(204).send();
   } catch (err) {
     next(err);
   }
 }
 
-export async function processRecurring(_req: Request, res: Response, next: NextFunction) {
+export async function processRecurring(req: Request, res: Response, next: NextFunction) {
   try {
     const now = new Date();
     const actives = await prisma.recurring.findMany({
-      where: { isActive: true, startDate: { lte: now } },
+      where: { isActive: true, startDate: { lte: now }, ...userWhere(req) },
     });
 
     let created = 0;
@@ -91,6 +97,7 @@ export async function processRecurring(_req: Request, res: Response, next: NextF
             categoryId: r.categoryId,
             isRecurring: true,
             recurringId: r.id,
+            userId: r.userId,
           },
         });
         await prisma.recurring.update({

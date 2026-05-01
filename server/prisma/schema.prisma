@@ -9,31 +9,51 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum Role {
+  ADMIN
+  USER
+}
+
+model User {
+  id        String   @id
+  email     String   @unique
+  name      String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Category {
   id        Int        @id @default(autoincrement())
-  name      String     @unique
+  name      String
   color     String     @default("#6366f1")
   icon      String     @default("tag")
+  userId    String     @default("")
   createdAt DateTime   @default(now())
   expenses  Expense[]
   skus      SKU[]
+
+  @@unique([name, userId])
 }
 
 model Merchant {
   id         Int        @id @default(autoincrement())
-  name       String     @unique
+  name       String
   website    String?
   logo       String?
   categoryId Int?
+  userId     String     @default("")
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
   expenses   Expense[]
   purchases  Purchase[]
+
+  @@unique([name, userId])
 }
 
 model SKU {
   id             Int             @id @default(autoincrement())
-  skuCode        String?         @unique
+  skuCode        String?
   name           String
   description    String?
   categoryId     Int?
@@ -46,10 +66,13 @@ model SKU {
   sellPrice      Decimal?        @db.Decimal(10, 2)
   hsnCode        String?
   gstRate        Decimal?        @db.Decimal(5, 2)
+  userId         String          @default("")
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   purchaseItems  PurchaseItem[]
   sellOrderItems SellOrderItem[]
+
+  @@unique([skuCode, userId])
 }
 
 model Purchase {
@@ -60,6 +83,7 @@ model Purchase {
   totalAmount Decimal        @db.Decimal(10, 2)
   notes       String?
   status      PurchaseStatus @default(COMPLETED)
+  userId      String         @default("")
   items       PurchaseItem[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -83,6 +107,7 @@ model SellOrder {
   totalAmount  Decimal         @db.Decimal(10, 2)
   notes        String?
   status       SellOrderStatus @default(COMPLETED)
+  userId       String          @default("")
   items        SellOrderItem[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
@@ -114,6 +139,7 @@ model Expense {
   isRecurring   Boolean       @default(false)
   recurringId   Int?
   recurring     Recurring?    @relation(fields: [recurringId], references: [id])
+  userId        String        @default("")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -128,6 +154,7 @@ model Recurring {
   endDate     DateTime?
   lastRun     DateTime?
   isActive    Boolean   @default(true)
+  userId      String    @default("")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   expenses    Expense[]
@@ -182,6 +209,7 @@ model Product {
   imagePath         String?
   hsnCode           String?
   gstRate           Float?
+  userId            String   @default("")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }

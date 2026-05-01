@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { auth } from './firebase';
 import type {
   Category, Expense, Recurring, Merchant,
   PaginatedExpenses, MonthlySummary, CategoryBreakdown, MerchantBreakdown, DashboardStats,
@@ -9,6 +10,15 @@ import type {
 } from '../types';
 
 const api = axios.create({ baseURL: '/api' });
+
+api.interceptors.request.use(async (config) => {
+  const user = auth.currentUser;
+  if (user) {
+    const token = await user.getIdToken();
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 // Input types — amount is always a number when writing, string when reading
 export interface ExpenseInput {
@@ -63,9 +73,17 @@ export const uploadBillImage = (expenseId: number, file: File) => {
 };
 export const deleteBillImage = (expenseId: number) =>
   api.delete<Expense>(`/expenses/${expenseId}/bill`).then(r => r.data);
-export const exportExpenses = (params?: Record<string, string | number>) => {
+export const exportExpenses = async (params?: Record<string, string | number>) => {
+  const user = auth.currentUser;
+  const token = user ? await user.getIdToken() : '';
   const query = new URLSearchParams(params as Record<string, string>).toString();
-  window.open(`/api/expenses/export${query ? `?${query}` : ''}`, '_blank');
+  const url = `/api/expenses/export${query ? `?${query}` : ''}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const blob = await response.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'expenses.csv';
+  a.click();
 };
 
 // Recurring

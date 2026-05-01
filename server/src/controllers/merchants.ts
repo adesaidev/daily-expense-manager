@@ -9,12 +9,15 @@ const merchantSchema = z.object({
   categoryId: z.number().int().positive().optional().nullable(),
 });
 
-export async function getMerchants(_req: Request, res: Response, next: NextFunction) {
+function userWhere(req: Request) {
+  return req.user!.role === 'ADMIN' ? {} : { userId: req.user!.uid };
+}
+
+export async function getMerchants(req: Request, res: Response, next: NextFunction) {
   try {
     const merchants = await prisma.merchant.findMany({
-      include: {
-        _count: { select: { expenses: true } },
-      },
+      where: userWhere(req),
+      include: { _count: { select: { expenses: true } } },
       orderBy: { name: 'asc' },
     });
     res.json(merchants);
@@ -26,8 +29,8 @@ export async function getMerchants(_req: Request, res: Response, next: NextFunct
 export async function getMerchant(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    const merchant = await prisma.merchant.findUnique({
-      where: { id: Number(id) },
+    const merchant = await prisma.merchant.findFirst({
+      where: { id: Number(id), ...userWhere(req) },
       include: {
         _count: { select: { expenses: true } },
         expenses: {
@@ -47,7 +50,7 @@ export async function getMerchant(req: Request, res: Response, next: NextFunctio
 export async function createMerchant(req: Request, res: Response, next: NextFunction) {
   try {
     const data = merchantSchema.parse(req.body);
-    const merchant = await prisma.merchant.create({ data });
+    const merchant = await prisma.merchant.create({ data: { ...data, userId: req.user!.uid } });
     res.status(201).json(merchant);
   } catch (err) {
     next(err);
@@ -59,7 +62,7 @@ export async function updateMerchant(req: Request, res: Response, next: NextFunc
     const { id } = req.params;
     const data = merchantSchema.partial().parse(req.body);
     const merchant = await prisma.merchant.update({
-      where: { id: Number(id) },
+      where: { id: Number(id), ...userWhere(req) },
       data,
     });
     res.json(merchant);
@@ -71,12 +74,11 @@ export async function updateMerchant(req: Request, res: Response, next: NextFunc
 export async function deleteMerchant(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    // Unlink expenses before deleting
     await prisma.expense.updateMany({
-      where: { merchantId: Number(id) },
+      where: { merchantId: Number(id), ...userWhere(req) },
       data: { merchantId: null },
     });
-    await prisma.merchant.delete({ where: { id: Number(id) } });
+    await prisma.merchant.delete({ where: { id: Number(id), ...userWhere(req) } });
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -86,7 +88,7 @@ export async function deleteMerchant(req: Request, res: Response, next: NextFunc
 export async function getMerchantBreakdown(req: Request, res: Response, next: NextFunction) {
   try {
     const { month, year } = req.query;
-    const where: Record<string, unknown> = { merchantId: { not: null } };
+    const where: Record<string, unknown> = { merchantId: { not: null }, ...userWhere(req) };
 
     if (month && year) {
       const start = new Date(Number(year), Number(month) - 1, 1);
@@ -103,7 +105,9 @@ export async function getMerchantBreakdown(req: Request, res: Response, next: Ne
     });
 
     const merchantIds = result.map(r => r.merchantId!).filter(Boolean);
-    const merchants = await prisma.merchant.findMany({ where: { id: { in: merchantIds } } });
+    const merchants = await prisma.merchant.findMany({
+      where: { id: { in: merchantIds }, ...userWhere(req) },
+    });
     const merchantMap = Object.fromEntries(merchants.map(m => [m.id, m]));
 
     const breakdown = result.map(r => ({

@@ -10,10 +10,13 @@ import { getSKUs, getSKU, createSKU, updateSKU, deleteSKU } from '../controllers
 import { getPurchases, getPurchase, createPurchase, updatePurchase, deletePurchase } from '../controllers/purchases';
 import { getSellOrders, getSellOrder, createSellOrder, updateSellOrder, deleteSellOrder } from '../controllers/sellOrders';
 import { getProducts, getProduct, createProduct, updateProduct, deleteProduct, uploadProductImage, deleteProductImage } from '../controllers/products';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
 router.get('/health', (_req, res) => res.json({ ok: true }));
+
+router.use(requireAuth);
 
 // Categories
 router.get('/categories', getCategories);

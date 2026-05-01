@@ -16,20 +16,22 @@ const expenseSchema = z.object({
 
 const expenseInclude = { category: true, merchant: true };
 
+function userWhere(req: Request) {
+  return req.user!.role === 'ADMIN' ? {} : { userId: req.user!.uid };
+}
+
 export async function getExpenses(req: Request, res: Response, next: NextFunction) {
   try {
     const { month, year, day, startDate, endDate, categoryId, merchantId, paymentStatus, paymentType, page = '1', limit = '50' } = req.query;
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { ...userWhere(req) };
 
     if (startDate && endDate) {
-      // Explicit date range from calendar picker
       const start = new Date(String(startDate));
       const end = new Date(String(endDate));
       end.setHours(23, 59, 59, 999);
       where.date = { gte: start, lte: end };
     } else if (startDate) {
-      // Single day via calendar
       const start = new Date(String(startDate));
       const end = new Date(String(startDate));
       end.setHours(23, 59, 59, 999);
@@ -75,7 +77,7 @@ export async function createExpense(req: Request, res: Response, next: NextFunct
   try {
     const data = expenseSchema.parse(req.body);
     const expense = await prisma.expense.create({
-      data: { ...data, date: new Date(data.date) },
+      data: { ...data, date: new Date(data.date), userId: req.user!.uid },
       include: expenseInclude,
     });
     res.status(201).json(expense);
@@ -89,7 +91,7 @@ export async function updateExpense(req: Request, res: Response, next: NextFunct
     const { id } = req.params;
     const data = expenseSchema.partial().parse(req.body);
     const expense = await prisma.expense.update({
-      where: { id: Number(id) },
+      where: { id: Number(id), ...userWhere(req) },
       data: { ...data, ...(data.date ? { date: new Date(data.date) } : {}) },
       include: expenseInclude,
     });
@@ -102,7 +104,7 @@ export async function updateExpense(req: Request, res: Response, next: NextFunct
 export async function deleteExpense(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params;
-    await prisma.expense.delete({ where: { id: Number(id) } });
+    await prisma.expense.delete({ where: { id: Number(id), ...userWhere(req) } });
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -112,7 +114,7 @@ export async function deleteExpense(req: Request, res: Response, next: NextFunct
 export async function exportExpenses(req: Request, res: Response, next: NextFunction) {
   try {
     const { month, year } = req.query;
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { ...userWhere(req) };
 
     if (month && year) {
       const start = new Date(Number(year), Number(month) - 1, 1);

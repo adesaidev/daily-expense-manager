@@ -21,19 +21,14 @@ const purchaseInclude = {
   items: { include: { sku: true } },
 };
 
-async function adjustStock(items: { skuId: number; quantity: number }[], direction: 1 | -1) {
-  for (const item of items) {
-    await prisma.sKU.update({
-      where: { id: item.skuId },
-      data: { currentStock: { increment: item.quantity * direction } },
-    });
-  }
+function userWhere(req: Request) {
+  return req.user!.role === 'ADMIN' ? {} : { userId: req.user!.uid };
 }
 
 export async function getPurchases(req: Request, res: Response, next: NextFunction) {
   try {
     const { merchantId, status, page = '1', limit = '20' } = req.query;
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { ...userWhere(req) };
     if (merchantId) where.merchantId = Number(merchantId);
     if (status) where.status = status;
 
@@ -48,7 +43,10 @@ export async function getPurchases(req: Request, res: Response, next: NextFuncti
 
 export async function getPurchase(req: Request, res: Response, next: NextFunction) {
   try {
-    const purchase = await prisma.purchase.findUniqueOrThrow({ where: { id: Number(req.params.id) }, include: purchaseInclude });
+    const purchase = await prisma.purchase.findFirstOrThrow({
+      where: { id: Number(req.params.id), ...userWhere(req) },
+      include: purchaseInclude,
+    });
     res.json(purchase);
   } catch (err) { next(err); }
 }
@@ -58,122 +56,138 @@ export async function createPurchase(req: Request, res: Response, next: NextFunc
     const { items, ...rest } = purchaseSchema.parse(req.body);
     const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
 
-    const purchase = await prisma.$transaction(async (tx) => {
-      const created = await tx.purchase.create({
-        data: {
-          ...rest,
-          date: rest.date ? new Date(rest.date) : new Date(),
-          totalAmount,
-          items: {
-            create: items.map(i => ({
-              skuId: i.skuId,
-              quantity: i.quantity,
-              unitPrice: i.unitPrice,
-              totalPrice: i.quantity * i.unitPrice,
-            })),
-          },
-        },
-        include: purchaseInclude,
-      });
-
-      if (rest.status === 'COMPLETED') {
-        for (const item of items) {
-          await tx.sKU.update({
-            where: { id: item.skuId },
-            data: { currentStock: { increment: item.quantity } },
-          });
-        }
-      }
-      return created;
+    // Create purchase without nested items to avoid implicit transaction
+    const purchase = await prisma.purchase.create({
+      data: {
+        merchantId: rest.merchantId ?? null,
+        date: rest.date ? new Date(rest.date) : new Date(),
+        totalAmount,
+        notes: rest.notes ?? null,
+        status: rest.status,
+        userId: req.user!.uid,
+      },
     });
 
-    res.status(201).json(purchase);
+    // Create items one by one
+    for (const item of items) {
+      await prisma.purchaseItem.create({
+        data: {
+          purchaseId: purchase.id,
+          skuId: item.skuId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.quantity * item.unitPrice,
+        },
+      });
+    }
+
+    // Adjust stock
+    if (rest.status === 'COMPLETED') {
+      for (const item of items) {
+        await prisma.sKU.update({
+          where: { id: item.skuId },
+          data: { currentStock: { increment: item.quantity } },
+        });
+      }
+    }
+
+    const result = await prisma.purchase.findUniqueOrThrow({
+      where: { id: purchase.id },
+      include: purchaseInclude,
+    });
+    res.status(201).json(result);
   } catch (err) { next(err); }
 }
 
 export async function updatePurchase(req: Request, res: Response, next: NextFunction) {
   try {
     const { items, ...rest } = purchaseSchema.partial().parse(req.body);
-    const existing = await prisma.purchase.findUniqueOrThrow({
-      where: { id: Number(req.params.id) },
+    const existing = await prisma.purchase.findFirstOrThrow({
+      where: { id: Number(req.params.id), ...userWhere(req) },
       include: { items: true },
     });
 
-    const purchase = await prisma.$transaction(async (tx) => {
-      // Reverse old stock effect if was COMPLETED
-      if (existing.status === 'COMPLETED') {
-        for (const item of existing.items) {
-          await tx.sKU.update({
-            where: { id: item.skuId },
-            data: { currentStock: { decrement: Number(item.quantity) } },
-          });
-        }
+    // Reverse old stock if was COMPLETED
+    if (existing.status === 'COMPLETED') {
+      for (const item of existing.items) {
+        await prisma.sKU.update({
+          where: { id: item.skuId },
+          data: { currentStock: { decrement: Number(item.quantity) } },
+        });
       }
+    }
 
-      const newItems = items ?? existing.items.map(i => ({
-        skuId: i.skuId,
-        quantity: Number(i.quantity),
-        unitPrice: Number(i.unitPrice),
-      }));
-      const totalAmount = newItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
-      const newStatus = rest.status ?? existing.status;
+    const newItems = items ?? existing.items.map(i => ({
+      skuId: i.skuId,
+      quantity: Number(i.quantity),
+      unitPrice: Number(i.unitPrice),
+    }));
+    const totalAmount = newItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+    const newStatus = rest.status ?? existing.status;
 
-      const updated = await tx.purchase.update({
-        where: { id: Number(req.params.id) },
-        data: {
-          ...rest,
-          ...(rest.date ? { date: new Date(rest.date) } : {}),
-          totalAmount,
-          ...(items ? {
-            items: {
-              deleteMany: {},
-              create: items.map(i => ({
-                skuId: i.skuId,
-                quantity: i.quantity,
-                unitPrice: i.unitPrice,
-                totalPrice: i.quantity * i.unitPrice,
-              })),
-            },
-          } : {}),
-        },
-        include: purchaseInclude,
-      });
-
-      // Apply new stock effect if now COMPLETED
-      if (newStatus === 'COMPLETED') {
-        for (const item of newItems) {
-          await tx.sKU.update({
-            where: { id: item.skuId },
-            data: { currentStock: { increment: item.quantity } },
-          });
-        }
-      }
-      return updated;
+    // Update purchase fields only (no nested writes)
+    await prisma.purchase.update({
+      where: { id: Number(req.params.id) },
+      data: {
+        ...(rest.merchantId !== undefined ? { merchantId: rest.merchantId } : {}),
+        ...(rest.date ? { date: new Date(rest.date) } : {}),
+        ...(rest.notes !== undefined ? { notes: rest.notes } : {}),
+        ...(rest.status ? { status: rest.status } : {}),
+        totalAmount,
+      },
     });
 
-    res.json(purchase);
+    // Replace items if provided
+    if (items) {
+      await prisma.purchaseItem.deleteMany({ where: { purchaseId: Number(req.params.id) } });
+      for (const item of items) {
+        await prisma.purchaseItem.create({
+          data: {
+            purchaseId: Number(req.params.id),
+            skuId: item.skuId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.quantity * item.unitPrice,
+          },
+        });
+      }
+    }
+
+    // Apply new stock
+    if (newStatus === 'COMPLETED') {
+      for (const item of newItems) {
+        await prisma.sKU.update({
+          where: { id: item.skuId },
+          data: { currentStock: { increment: item.quantity } },
+        });
+      }
+    }
+
+    const result = await prisma.purchase.findUniqueOrThrow({
+      where: { id: Number(req.params.id) },
+      include: purchaseInclude,
+    });
+    res.json(result);
   } catch (err) { next(err); }
 }
 
 export async function deletePurchase(req: Request, res: Response, next: NextFunction) {
   try {
-    const existing = await prisma.purchase.findUniqueOrThrow({
-      where: { id: Number(req.params.id) },
+    const existing = await prisma.purchase.findFirstOrThrow({
+      where: { id: Number(req.params.id), ...userWhere(req) },
       include: { items: true },
     });
 
-    await prisma.$transaction(async (tx) => {
-      if (existing.status === 'COMPLETED') {
-        for (const item of existing.items) {
-          await tx.sKU.update({
-            where: { id: item.skuId },
-            data: { currentStock: { decrement: Number(item.quantity) } },
-          });
-        }
+    if (existing.status === 'COMPLETED') {
+      for (const item of existing.items) {
+        await prisma.sKU.update({
+          where: { id: item.skuId },
+          data: { currentStock: { decrement: Number(item.quantity) } },
+        });
       }
-      await tx.purchase.delete({ where: { id: Number(req.params.id) } });
-    });
+    }
 
+    await prisma.purchase.delete({ where: { id: Number(req.params.id) } });
     res.status(204).send();
   } catch (err) { next(err); }
 }
